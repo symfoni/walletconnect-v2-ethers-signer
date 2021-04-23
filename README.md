@@ -7,23 +7,20 @@
 
 # Use
 
-````ts
+```ts
+// Create a signer with a RPC endpoint
+const walletConnectSigner = new WalletConnectSigner({
+  chainId: CHAIN_ID,
+}).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
 
-    // Create a signer with a RPC endpoint
-    const walletConnectSigner = new WalletConnectSigner({
-      chainId: CHAIN_ID,
-    }).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
+// Listen for URI
+walletConnectSigner.uri.then(async (res) => {
+  // Show the URI in QR code or something
+});
 
-    // Listen for URI
-    walletConnectSigner.uri.then(async (res) => {
-        // Show the URI in QR code or something
-    });
-
-    // Start connecting to a Wallet, will initate a URI
-    const accounts = await walletConnectSigner.enable();
-
+// Start connecting to a Wallet, will initate a URI
+const accounts = await walletConnectSigner.enable();
 ```
-
 
 ## License
 
@@ -52,4 +49,7 @@ Licensed under the APLv2. See the [LICENSE](https://github.com/jsynowiec/node-ty
 [gh-actions]: https://github.com/features/actions
 [travis]: https://travis-ci.org
 [repo-template-action]: https://github.com/jsynowiec/node-typescript-boilerplate/generate
-````
+
+```
+
+```
