@@ -9,17 +9,16 @@
 
 ```ts
 // Create a signer with a RPC endpoint
-const walletConnectSigner = new WalletConnectSigner({
-  chainId: CHAIN_ID,
+return new WalletConnectSigner({
+  qrModal: false,
 }).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
 
 // Listen for URI
-walletConnectSigner.uri.then(async (res) => {
-  // Show the URI in QR code or something
+walletConnectSigner.on(SIGNER_EVENTS.uri, ({ uri }) => {
+  // use URI to pair with Wallet
 });
-
-// Start connecting to a Wallet, will initate a URI
-const accounts = await walletConnectSigner.enable();
+await walletConnectSigner.open();
+const address = await walletConnectSigner.getAddress();
 ```
 
 ## License
