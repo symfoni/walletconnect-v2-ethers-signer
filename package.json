@@ -1,6 +1,6 @@
 {
   "name": "@symfoni/walletconnect-v2-ethers-signer",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A Ethers compatible signer for Wallet Connect version 2.",
   "engines": {
     "node": ">= 14.16 <15"
