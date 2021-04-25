@@ -1,36 +1,36 @@
-import WalletConnectClient, { CLIENT_EVENTS } from '@walletconnect/client';
-import { AppMetadata, PairingTypes, SessionTypes } from '@walletconnect/types';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { CLIENT_EVENTS, Client } from '@walletconnect/client';
+import {
+  ClientOptions,
+  IClient,
+  PairingTypes,
+  SessionTypes,
+} from '@walletconnect/types';
 import { Bytes, ethers, Signer } from 'ethers';
 import { Deferrable } from 'ethers/lib/utils';
+import { EventEmitter } from 'events';
+import WalletConnectQRCodeModal from '@walletconnect/qrcode-modal';
+import { QRCodeModalOptions } from '@walletconnect/qrcode-modal/dist/cjs/types';
 
-type RPCConfig =
-  | string
-  | {
-      [chainId: number]: string;
-    }
-  | { infuraId: string };
+export const SIGNER_EVENTS = {
+  init: 'signer_init',
+  uri: 'signer_uri',
+};
 
-interface WalletConnectWeb3ProviderOptions {
-  rpcConfig: RPCConfig;
-  relayProvider: string;
-  chainId: number;
-  metadata: AppMetadata;
+export interface WalletConnectSignerOpts {
+  chainId?: number;
+  qrModal: boolean;
+  qrModalOpts: QRCodeModalOptions;
   methods: string[];
   blockchain: string;
+  walletConnectOpts: Partial<ClientOptions>;
 }
 
-const DEFAULT = {
-  RPC_URL: 'http://localhost:8545',
-  RELAY_PROVIDER: 'wss://relay.walletconnect.org',
-  CHAIN_ID: 1,
-  metadata: {
-    name: 'Some dApp',
-    description: 'Some example dApp',
-    url: 'https://walletconnect.org/',
-    icons: [
-      'https://gblobscdn.gitbook.com/spaces%2F-LJJeCjcLrr53DcT1Ml7%2Favatar.png?alt=media',
-    ],
-  },
+const DEFAULT: WalletConnectSignerOpts = {
+  chainId: undefined,
+  qrModal: true,
+  qrModalOpts: {},
   methods: [
     'eth_sendTransaction',
     'personal_sign',
@@ -38,199 +38,94 @@ const DEFAULT = {
     'eth_signTransaction',
   ],
   blockchain: 'eip155',
+  walletConnectOpts: {
+    relayProvider: 'wss://relay.walletconnect.org',
+    metadata: {
+      name: 'Some dApp',
+      description: 'Some example dApp',
+      url: 'https://walletconnect.org/',
+      icons: [
+        'https://gblobscdn.gitbook.com/spaces%2F-LJJeCjcLrr53DcT1Ml7%2Favatar.png?alt=media',
+      ],
+    },
+    controller: false,
+  },
 };
 
+function isClient(opts?: IClient | ClientOptions): opts is IClient {
+  return (
+    typeof opts !== 'undefined' &&
+    typeof (opts as IClient).context !== 'undefined'
+  );
+}
+
 export class WalletConnectSigner extends Signer {
-  walletConnectClient: Promise<WalletConnectClient>;
-  uri: Promise<string>;
-  accounts?: Array<string>;
-  listener: Promise<void>;
-  options: WalletConnectWeb3ProviderOptions;
+  events = new EventEmitter();
   provider?: ethers.providers.Provider;
+  client?: IClient;
+  initializing = false;
+  private accounts?: Array<string>;
+  private opts: WalletConnectSignerOpts;
+  private pending = false;
+  private session: SessionTypes.Settled | undefined;
 
   constructor(
-    _options: Partial<WalletConnectWeb3ProviderOptions> = {},
+    _opts: Partial<WalletConnectSignerOpts> = {},
     provider?: ethers.providers.Provider,
   ) {
     super();
-    this.options = {
-      relayProvider: DEFAULT.RELAY_PROVIDER,
-      chainId: DEFAULT.CHAIN_ID,
-      rpcConfig: DEFAULT.RPC_URL,
-      metadata: DEFAULT.metadata,
-      methods: DEFAULT.methods,
-      blockchain: DEFAULT.blockchain,
-      ..._options,
+    if (_opts.walletConnectOpts) {
+      _opts.walletConnectOpts = {
+        ...DEFAULT.walletConnectOpts,
+        ..._opts.walletConnectOpts,
+      };
+    }
+    this.opts = {
+      ...DEFAULT,
+      ..._opts,
     };
-    this.walletConnectClient = WalletConnectClient.init({
-      relayProvider: this.options.relayProvider,
-      logger: 'warn',
-    });
-    this.listener = this.listen();
-    this.uri = this.getURI();
+    this.events = new EventEmitter();
     if (provider) {
       this.provider = provider;
     }
+    this.register(this.opts.walletConnectOpts);
+  }
+  get connected(): boolean {
+    return typeof this.session !== 'undefined';
   }
 
-  private async getURI() {
-    return new Promise<string>((resolve) => {
-      this.walletConnectClient.then((wc) => {
-        console.log('Wallet connect listening for URI');
-        wc.on(
-          CLIENT_EVENTS.pairing.proposal,
-          async (proposal: PairingTypes.Proposal) => {
-            console.log('CLIENT_EVENTS.pairing.proposal');
-            const { uri } = proposal.signal.params;
-            resolve(uri);
-          },
-        );
-      });
-    });
+  get connecting(): boolean {
+    return this.pending;
+  }
+  // PUBLIC
+
+  public on(event: string, listener: any): void {
+    this.events.on(event, listener);
+  }
+  public once(event: string, listener: any): void {
+    this.events.once(event, listener);
+  }
+  public removeListener(event: string, listener: any): void {
+    this.events.removeListener(event, listener);
+  }
+  public off(event: string, listener: any): void {
+    this.events.off(event, listener);
   }
 
-  enable = async () => {
-    await this.walletConnectClient;
-    const session = await this.createSession();
-    this.updateState(session);
-    return this.accounts;
-  };
-
-  createSession = async () => {
-    const wc = await this.walletConnectClient;
-
-    // Do we need to create a new session
-    const sessions = wc.session.values;
-    if (sessions.length > 0) {
-      try {
-        // TODO: Find out which session is last and check if its not expired
-        const selectedSession = sessions[0];
-        await wc.session.settled.set(selectedSession.topic, selectedSession, {
-          relay: selectedSession.relay,
-        });
-        const session = await wc.session.get(sessions[0].topic);
-        return session;
-      } catch (error) {
-        console.log('Couldt not set old session, creating new');
-      }
-    }
-    const { metadata, chainId, blockchain } = this.options;
-
-    return await wc.connect({
-      metadata,
-      permissions: {
-        blockchain: {
-          chains: [`${blockchain}:${chainId}`],
-        },
-        jsonrpc: {
-          methods: this.options.methods,
-        },
-      },
-    });
-  };
-
-  private listen = (): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      this.walletConnectClient.then((wc) => {
-        console.log('WalletConnect signer listening');
-        // Sessions
-        wc.on(
-          CLIENT_EVENTS.session.updated,
-          async (session: SessionTypes.Settled) => {
-            console.debug('CLIENT_EVENTS.session.updated', session);
-            this.updateState(session);
-          },
-        );
-        wc.on(
-          CLIENT_EVENTS.session.created,
-          (session: SessionTypes.Settled) => {
-            console.debug('CLIENT_EVENTS.session.created', session);
-          },
-        );
-        wc.on(
-          CLIENT_EVENTS.session.deleted,
-          (session: SessionTypes.Settled) => {
-            console.debug('CLIENT_EVENTS.session.deleted', session);
-          },
-        );
-
-        // Pairing
-        wc.on(
-          CLIENT_EVENTS.pairing.updated,
-          async (pairing: PairingTypes.Settled) => {
-            console.debug('CLIENT_EVENTS.pairing.updated', pairing);
-          },
-        );
-        wc.on(
-          CLIENT_EVENTS.pairing.created,
-          async (pairing: PairingTypes.Settled) => {
-            console.debug('CLIENT_EVENTS.pairing.created', pairing);
-          },
-        );
-        wc.on(
-          CLIENT_EVENTS.pairing.deleted,
-          async (pairing: PairingTypes.Settled) => {
-            console.debug('CLIENT_EVENTS.pairing.deleted', pairing);
-          },
-        );
-        wc.on('modal_closed', () => {
-          reject('User closed modal');
-        });
-        wc.on('disconnect', () => {
-          setTimeout(() => {
-            console.log('disconnect disconnect disconnect');
-
-            resolve();
-          }, 1000);
-        });
-      });
-    });
-  };
-
-  async updateState(session: SessionTypes.Settled) {
-    const { accounts } = session.state;
-    // Check if accounts changed and trigger event
-    if (!this.accounts || (accounts && this.accounts !== accounts)) {
-      this.accounts = accounts;
-      if (this.provider) {
-        this.provider.emit('accountsChanged', accounts);
-      }
-    }
-    // TODO chainChanged, networkChanged, rpcChanged, BlockchainChanged? :D
-  }
-
-  // private getRPCUrl() {
-  //   const _chainId = this.options.chainId;
-  //   if (typeof this.options.rpcConfig === 'string') {
-  //     return this.options.rpcConfig;
-  //   }
-  //   if ('infuraId' in this.options.rpcConfig) {
-  //     const infuraNetwork: InfuraNetworks = INFURA_NETWORKS;
-
-  //     if (!Object.prototype.hasOwnProperty.call(infuraNetwork, _chainId)) {
-  //       throw Error(
-  //         'Infura network has not be configured by WalletConnectWeb3Provider for chainId' +
-  //           this.options.chainId,
-  //       );
-  //     }
-  //     const network = infuraNetwork[_chainId];
-  //     return `https://${network}.infura.io/v3/${this.options.rpcConfig.infuraId}`;
-  //   }
-  //   if (
-  //     !Object.prototype.hasOwnProperty.call(this.options.rpcConfig, _chainId)
-  //   ) {
-  //     throw Error('Please set an RPC for chainID' + this.options.chainId);
-  //   }
-  //   return this.options.rpcConfig[_chainId];
+  // public waitFor(event: string): Promise<any> {
+  //   return new Promise((resolve) => {
+  //     this.events.once(event, (event) => {
+  //       resolve(event);
+  //     });
+  //   });
   // }
+  get isWalletConnect() {
+    return true;
+  }
 
-  // Returns the checksum address
-
-  async getAddress() {
+  public async getAddress() {
     if (!this.accounts) {
-      throw Error(
-        'walletConnectClient must be enabled before you can list accounts.',
-      );
+      throw Error('client must be enabled before you can list accounts.');
     }
     return this.accounts[0].split('@')[0];
   }
@@ -239,8 +134,15 @@ export class WalletConnectSigner extends Signer {
   // - Bytes as a binary message
   // - string as a UTF8-message
   // i.e. "0x1234" is a SIX (6) byte string, NOT 2 bytes of data
-  async signMessage(message: Bytes | string): Promise<string> {
-    const wc = await this.walletConnectClient;
+  public async signMessage(message: Bytes | string): Promise<string> {
+    if (typeof this.client === 'undefined') {
+      this.client = await this.register();
+      if (!this.connected) await this.open();
+    }
+    if (typeof this.session === 'undefined') {
+      throw new Error('Signer connection is missing session');
+    }
+    const wc = await this.register();
     const address = await this.getAddress();
     const res = await wc.request({
       request: {
@@ -256,16 +158,22 @@ export class WalletConnectSigner extends Signer {
   // The EXACT transaction MUST be signed, and NO additional properties to be added.
   // - This MAY throw if signing transactions is not supports, but if
   //   it does, sentTransaction MUST be overridden.
-  async signTransaction(
+  public async signTransaction(
     transaction: Deferrable<ethers.providers.TransactionRequest>,
   ): Promise<string> {
-    const wc = await this.walletConnectClient;
-    const res = await wc.request({
+    if (typeof this.client === 'undefined') {
+      this.client = await this.register();
+      if (!this.connected) await this.open();
+    }
+    if (typeof this.session === 'undefined') {
+      throw new Error('Signer connection is missing session');
+    }
+    const res = await this.client.request({
       request: {
         method: 'eth_signTransaction',
         params: [transaction],
       },
-      topic: wc.session.topics[0],
+      topic: this.session.topic,
     });
     return res as string;
   }
@@ -273,41 +181,195 @@ export class WalletConnectSigner extends Signer {
   // Returns a new instance of the Signer, connected to provider.
   // This MAY throw if changing providers is not supported.
   connect(provider: ethers.providers.Provider): WalletConnectSigner {
-    return new WalletConnectSigner(this.options, provider);
+    return new WalletConnectSigner(this.opts, provider);
   }
 
-  async close() {
-    const wc = await this.walletConnectClient;
-    wc.events.emit('disconnect');
-    await this.listener;
-    await Promise.all(
-      wc.pairing.topics.map((topic) => {
-        return wc.disconnect({
-          topic: topic,
-          reason: {
-            code: 123,
-            message: 'Test ended',
-          },
-        });
-      }),
-    );
-    await Promise.all(
-      wc.session.topics.map((topic) => {
-        return wc.disconnect({
-          topic: topic,
-          reason: {
-            code: 123,
-            message: 'Test ended',
-          },
-        });
-      }),
-    );
+  public async open(): Promise<void> {
+    this.pending = true;
+    const client = await this.register();
+    let chainId = undefined;
+    if (this.provider) {
+      const network = await this.provider.getNetwork();
+      chainId = network.chainId;
+    } else {
+      chainId = this.opts.chainId;
+    }
+    console.log(chainId);
+    if (!chainId) {
+      throw Error(
+        'WalletConnectSigner must be initialized with a chainId when no provider is connected or the provider is unable to provide chainId.',
+      );
+    }
+    const { blockchain } = this.opts;
+    const { metadata } = this.opts.walletConnectOpts;
+    this.session = await client.connect({
+      metadata,
+      permissions: {
+        blockchain: {
+          chains: [`${blockchain}:${chainId}`],
+        },
+        jsonrpc: {
+          methods: this.opts.methods,
+        },
+      },
+    });
+    console.log('got sessions');
+    this.onOpen();
+  }
 
-    delete (this as any).walletConnectClient;
-    delete (this as any).uri;
-    delete (this as any).accounts;
+  public async close() {
+    if (typeof this.session === 'undefined') {
+      return;
+    }
+    const client = await this.register();
+    await client.disconnect({
+      topic: this.session.topic,
+      reason: {
+        code: 123,
+        message: 'WalletConnectSigner closed.',
+      },
+    });
+    this.onClose();
+  }
 
-    delete (this as any).provider;
-    return true;
+  // ---------- Private ----------------------------------------------- //
+
+  private async register(opts?: IClient | ClientOptions): Promise<IClient> {
+    if (typeof this.client !== 'undefined') {
+      return this.client;
+    }
+    if (this.initializing) {
+      return new Promise((resolve, reject) => {
+        this.events.once(SIGNER_EVENTS.init, () => {
+          if (typeof this.client === 'undefined') {
+            return reject(new Error('Client not initialized'));
+          }
+          resolve(this.client);
+        });
+      });
+    }
+    if (isClient(opts)) {
+      this.client = opts;
+      this.registerEventListeners();
+      return this.client;
+    }
+    this.initializing = true;
+    this.client = await Client.init(opts);
+    this.initializing = false;
+    this.registerEventListeners();
+    this.events.emit(SIGNER_EVENTS.init);
+    return this.client;
+  }
+
+  private onClose() {
+    this.pending = false;
+    if (this.client) {
+      this.client = undefined;
+    }
+    this.events.emit('close');
+  }
+
+  private onOpen(session?: SessionTypes.Settled) {
+    this.pending = false;
+    if (session) {
+      this.session = session;
+    }
+    this.events.emit('open');
+  }
+
+  private async updateState(session: SessionTypes.Settled) {
+    const { accounts } = session.state;
+    // Check if accounts changed and trigger event
+    if (!this.accounts || (accounts && this.accounts !== accounts)) {
+      this.accounts = accounts;
+      if (this.provider) {
+        this.provider.emit('accountsChanged', accounts);
+      }
+    }
+    this.events.emit('stateUpdated', true);
+    // TODO chainChanged, networkChanged, rpcChanged, BlockchainChanged? :D
+  }
+
+  private registerEventListeners() {
+    if (typeof this.client === 'undefined') return;
+    console.log('App listening');
+    // Sessions
+    this.client.on(
+      CLIENT_EVENTS.session.updated,
+      async (session: SessionTypes.Settled) => {
+        console.debug('CLIENT_EVENTS.session.updated');
+        if (!this.session || this.session?.topic !== session.topic) return;
+        this.session = session;
+        this.updateState(session);
+      },
+    );
+    this.client.on(
+      CLIENT_EVENTS.session.created,
+      (session: SessionTypes.Settled) => {
+        console.debug('CLIENT_EVENTS.session.created');
+        this.updateState(session);
+      },
+    );
+    this.client.on(
+      CLIENT_EVENTS.session.deleted,
+      (_session: SessionTypes.Settled) => {
+        this.onClose();
+      },
+    );
+    // Pairing
+    this.client.on(
+      CLIENT_EVENTS.pairing.proposal,
+      async (proposal: PairingTypes.Proposal) => {
+        console.debug('CLIENT_EVENTS.pairing.proposal');
+        const uri = proposal.signal.params.uri;
+        this.events.emit(SIGNER_EVENTS.uri, { uri });
+        if (this.opts.qrModal) {
+          WalletConnectQRCodeModal.open(
+            uri,
+            () => {
+              console.log('Modal open');
+            },
+            this.opts.qrModalOpts,
+          );
+        }
+      },
+    );
+    this.client.on(
+      CLIENT_EVENTS.pairing.updated,
+      async (_pairing: PairingTypes.Settled) => {
+        console.debug('CLIENT_EVENTS.pairing.updated');
+      },
+    );
+    this.client.on(
+      CLIENT_EVENTS.pairing.created,
+      async (_pairing: PairingTypes.Settled) => {
+        console.debug('CLIENT_EVENTS.pairing.created');
+      },
+    );
+    this.client.on(
+      CLIENT_EVENTS.pairing.deleted,
+      async (_pairing: PairingTypes.Settled) => {
+        console.debug('CLIENT_EVENTS.pairing.deleted');
+      },
+    );
   }
 }
+
+// async getClient() {
+//   if (this.initializing) {
+//     return new Promise<WalletConnectClient>((resolve, reject) => {
+//       this.events.once('initialized', () => {
+//         if (typeof this.client === 'undefined') {
+//           reject(new Error('Client not initialized'));
+//         }
+//         resolve(this.client);
+//       });
+//     });
+//   }
+
+//   this.initializing = true;
+//   this.client = await WalletConnectClient.init(this.opts.walletConnectOpts);
+//   this.initializing = false;
+//   this.events.emit('initialized');
+//   return this.client;
+// }

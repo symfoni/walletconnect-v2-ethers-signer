@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { WalletConnectSigner } from '../src/index';
+import { SIGNER_EVENTS, WalletConnectSigner } from '../src/index';
 import { WalletClient } from '../src/WalletClient';
 import { TestNetwork } from 'ethereum-test-network';
 import { ERC20Token__factory } from '../__test__utils__/ERC20Token__factory';
@@ -15,10 +15,35 @@ const DEFAULT_GENESIS_ACCOUNTS = [
   },
 ];
 
+const getWalletClient = () => {
+  return new WalletClient({
+    rpcURL: RPC_URL,
+    privateKey: DEFAULT_GENESIS_ACCOUNTS[0].privateKey,
+    walletConnectOpts: {
+      storageOptions: {
+        database: 'WalletClient.db',
+        tableName: 'test_' + Math.floor(Math.random() * 99999).toString(),
+      },
+      logger: 'warn',
+    },
+  });
+};
+
+const getAppClient = () => {
+  return new WalletConnectSigner({
+    chainId: CHAIN_ID,
+    qrModal: false,
+    walletConnectOpts: {
+      // storageOptions: {
+      //   database: 'WalletConnectSigner.db',
+      //   tableName: 'test_1',
+      // },
+      logger: 'warn',
+    },
+  }).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
+};
 describe('WalletConnectSigner', () => {
   let testnetwork: TestNetwork;
-  let walletClient: WalletClient;
-  let walletConnectSigner: WalletConnectSigner;
 
   beforeEach(async () => {
     testnetwork = await TestNetwork.init({
@@ -26,53 +51,52 @@ describe('WalletConnectSigner', () => {
       port: PORT,
       genesisAccounts: DEFAULT_GENESIS_ACCOUNTS,
     });
-    walletClient = new WalletClient({
-      chainId: CHAIN_ID,
-      rpcURL: RPC_URL,
-      privateKey: DEFAULT_GENESIS_ACCOUNTS[0].privateKey,
-    });
-    walletConnectSigner = new WalletConnectSigner({
-      chainId: CHAIN_ID,
-    }).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
   });
 
   afterEach(async () => {
     await testnetwork.close();
-    await walletClient.close();
   });
 
   it('should initiate', async () => {
-    let uri;
-    const connected = walletConnectSigner.uri.then(async (res) => {
-      uri = res;
-      return await walletClient.pair(uri);
+    const walletClient = getWalletClient();
+    const walletConnectSigner = getAppClient();
+    console.log(0);
+    walletConnectSigner.on(SIGNER_EVENTS.uri, ({ uri }) => {
+      return walletClient.pair(uri);
     });
-    const accounts = await walletConnectSigner.enable();
-    console.log(accounts);
-    expect(await connected).toBeTruthy();
-    expect(uri).toContain('wc');
-    expect(accounts.length).toBeGreaterThan(0);
-    expect(accounts[0]).toContain(
+    await walletConnectSigner.open();
+    const address = await walletConnectSigner.getAddress();
+    expect(address).toContain(
       new ethers.Wallet(DEFAULT_GENESIS_ACCOUNTS[0].privateKey).address,
     );
+    await walletClient.close();
+    await walletConnectSigner.close();
   });
 
+  // eslint-disable-next-line jest/no-disabled-tests
   it('should deploy erc20', async () => {
-    let uri;
-    const connected = walletConnectSigner.uri.then(async (res) => {
-      uri = res;
-      return await walletClient.pair(uri);
+    const walletClient = getWalletClient();
+    const walletConnectSigner = getAppClient();
+    console.log(0);
+    walletConnectSigner.on(SIGNER_EVENTS.uri, ({ uri }) => {
+      return walletClient.pair(uri);
     });
-    const accounts = await walletConnectSigner.enable();
+    await walletConnectSigner.open();
+    const address = await walletConnectSigner.getAddress();
     const erc20Factory = new ERC20Token__factory(walletConnectSigner);
+    console.log(2);
     const erc20 = await erc20Factory.deploy('The test token', 'tst', 18);
+    console.log(3);
     await erc20.deployed();
+    console.log(4);
     const balanceToMint = ethers.utils.parseEther('500');
-    console.log(accounts[0]);
-    const mintTx = await erc20.mint(accounts[0].split('@')[0], balanceToMint);
+    console.log(address);
+    const mintTx = await erc20.mint(address, balanceToMint);
     await mintTx.wait();
-    const tokenBalance = await erc20.balanceOf(accounts[0].split('@')[0]);
-    expect(await connected).toBeTruthy();
+    const tokenBalance = await erc20.balanceOf(address);
+    console.log('tokenBalance', tokenBalance.toString());
+    await walletConnectSigner.close();
+    await walletClient.close();
     expect(tokenBalance.eq(balanceToMint)).toBeTruthy();
   });
 });
