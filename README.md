@@ -5,6 +5,12 @@
 [![Build Status - Travis][travis-badge]][travis-ci]
 [![Build Status - GitHub Actions][gha-badge]][gha-ci]
 
+#### 👷‍ Join our team to contribute full-time to tools like Walletconnect v2 Ethers signer!
+
+We're hiring. If you're a full-stack dApp developer, we want you! 👈 This is an excellent opportunity to contribute full-time to the Ethereum ecosystem. 
+
+**[Check out our job listing](https://www.notion.so/symfoni/Symfoni-jobs-0c2bdc029d2a4cf7b91864a5e68ed00f)**
+
 # Use
 
 ```ts
