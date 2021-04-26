@@ -1,6 +1,6 @@
 {
   "name": "@symfoni/walletconnect-v2-ethers-signer",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "A Ethers compatible signer for Wallet Connect version 2.",
   "engines": {
     "node": ">= 14.16 <15"
@@ -42,7 +42,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
-    "prepublish": "npm version patch --force && npm run build"
+    "prepublish": "npm run build",
+    "patch": "npm version patch --force"
   },
   "author": "Jakub Synowiec <github@jakubsynowiec.info>",
   "license": "Apache-2.0",
