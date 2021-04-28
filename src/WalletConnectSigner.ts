@@ -1,12 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CLIENT_EVENTS, Client } from '@walletconnect/client';
-import {
-  ClientOptions,
-  IClient,
-  PairingTypes,
-  SessionTypes,
-} from '@walletconnect/types';
+import { ClientOptions, IClient, PairingTypes, SessionTypes } from '@walletconnect/types';
 import { Bytes, ethers, Signer } from 'ethers';
 import { Deferrable } from 'ethers/lib/utils';
 import { EventEmitter } from 'events';
@@ -28,12 +23,7 @@ export interface WalletConnectSignerOpts {
 
 const DEFAULT: WalletConnectSignerOpts = {
   chainId: undefined,
-  methods: [
-    'eth_sendTransaction',
-    'personal_sign',
-    'eth_signTypedData',
-    'eth_signTransaction',
-  ],
+  methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTransaction'],
   blockchain: 'eip155',
   walletConnectOpts: {
     relayProvider: 'wss://relay.walletconnect.org',
@@ -41,19 +31,14 @@ const DEFAULT: WalletConnectSignerOpts = {
       name: 'Some dApp',
       description: 'Some example dApp',
       url: 'https://walletconnect.org/',
-      icons: [
-        'https://gblobscdn.gitbook.com/spaces%2F-LJJeCjcLrr53DcT1Ml7%2Favatar.png?alt=media',
-      ],
+      icons: ['https://gblobscdn.gitbook.com/spaces%2F-LJJeCjcLrr53DcT1Ml7%2Favatar.png?alt=media'],
     },
     controller: false,
   },
 };
 
 function isClient(opts?: IClient | ClientOptions): opts is IClient {
-  return (
-    typeof opts !== 'undefined' &&
-    typeof (opts as IClient).context !== 'undefined'
-  );
+  return typeof opts !== 'undefined' && typeof (opts as IClient).context !== 'undefined';
 }
 
 export class WalletConnectSigner extends Signer {
@@ -65,11 +50,10 @@ export class WalletConnectSigner extends Signer {
   private opts: WalletConnectSignerOpts;
   private pending = false;
   private session: SessionTypes.Settled | undefined;
+  _index: number;
+  _address: string;
 
-  constructor(
-    _opts: Partial<WalletConnectSignerOpts> = {},
-    provider?: ethers.providers.Provider,
-  ) {
+  constructor(_opts: Partial<WalletConnectSignerOpts> = {}, provider?: ethers.providers.Provider) {
     super();
     if (_opts.walletConnectOpts) {
       _opts.walletConnectOpts = {
@@ -130,23 +114,50 @@ export class WalletConnectSigner extends Signer {
       chainId = this.opts.chainId;
     }
     if (!chainId) {
-      throw Error(
-        'WalletConnectSigner must be initialized with a chainId when no provider is connected or the provider is unable to provide chainId.',
-      );
+      throw Error('WalletConnectSigner must be initialized with a chainId when no provider is connected or the provider is unable to provide chainId.');
     }
+    // Check for exsisting sessions
+
     const { blockchain } = this.opts;
     const { metadata } = this.opts.walletConnectOpts;
-    this.session = await client.connect({
-      metadata,
-      permissions: {
-        blockchain: {
-          chains: [`${blockchain}:${chainId}`],
-        },
-        jsonrpc: {
-          methods: this.opts.methods,
-        },
-      },
+    console.log(this.client.session.settled.topics);
+    // const supportedSession = this.client.session.settled.topics
+    const supportedSession = this.client.session.values.find((session) => {
+      // TODO handle expiry
+      // Are we on same blockchain:chainId
+      if (session.permissions.blockchain.chains.indexOf(`${blockchain}:${chainId}`) === -1) {
+        console.debug(`Session does not support  ${blockchain}:${chainId}`);
+        return false;
+      }
+      const foundUnsupportedMethod = this.opts.methods.find((method) => {
+        if (session.permissions.jsonrpc.methods.indexOf(method) === -1) {
+          return true;
+        }
+        return false;
+      });
+      if (foundUnsupportedMethod) {
+        console.debug(`Session does not support method ${foundUnsupportedMethod}`);
+        return false;
+      }
+      return true;
     });
+    if (supportedSession) {
+      console.log('connected to old session');
+      this.session = await this.client.session.settled.get(supportedSession.topic);
+      this.updateState(this.session);
+    } else {
+      this.session = await client.connect({
+        metadata,
+        permissions: {
+          blockchain: {
+            chains: [`${blockchain}:${chainId}`],
+          },
+          jsonrpc: {
+            methods: this.opts.methods,
+          },
+        },
+      });
+    }
     this.onOpen();
   }
 
@@ -200,9 +211,7 @@ export class WalletConnectSigner extends Signer {
   // The EXACT transaction MUST be signed, and NO additional properties to be added.
   // - This MAY throw if signing transactions is not supports, but if
   //   it does, sentTransaction MUST be overridden.
-  public async signTransaction(
-    transaction: Deferrable<ethers.providers.TransactionRequest>,
-  ): Promise<string> {
+  public async signTransaction(transaction: Deferrable<ethers.providers.TransactionRequest>): Promise<string> {
     if (typeof this.client === 'undefined') {
       this.client = await this.register();
       if (!this.connected) await this.open();
@@ -274,80 +283,61 @@ export class WalletConnectSigner extends Signer {
         this.provider.emit('accountsChanged', accounts);
       }
     }
-    this.events.emit(SIGNER_EVENTS.statusUpdate, true);
+    this.events.emit(SIGNER_EVENTS.statusUpdate, session);
     // TODO chainChanged, networkChanged, rpcChanged, BlockchainChanged? :D
   }
 
   private registerEventListeners() {
     if (typeof this.client === 'undefined') return;
     // Sessions
-    this.client.on(
-      CLIENT_EVENTS.session.updated,
-      async (session: SessionTypes.Settled) => {
-        console.debug('CLIENT_EVENTS.session.updated');
-        if (!this.session || this.session?.topic !== session.topic) return;
-        this.session = session;
-        this.updateState(session);
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.session.created,
-      (session: SessionTypes.Settled) => {
-        console.debug('CLIENT_EVENTS.session.created');
-        this.updateState(session);
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.session.deleted,
-      (_session: SessionTypes.Settled) => {
-        this.onClose();
-      },
-    );
+    this.client.on(CLIENT_EVENTS.session.updated, async (session: SessionTypes.Settled) => {
+      console.debug('CLIENT_EVENTS.session.updated');
+      if (!this.session || this.session?.topic !== session.topic) return;
+      this.session = session;
+      this.updateState(session);
+    });
+    this.client.on(CLIENT_EVENTS.session.created, (session: SessionTypes.Settled) => {
+      console.debug('CLIENT_EVENTS.session.created');
+      this.updateState(session);
+    });
+    this.client.on(CLIENT_EVENTS.session.deleted, (_session: SessionTypes.Settled) => {
+      this.onClose();
+    });
     // Pairing
-    this.client.on(
-      CLIENT_EVENTS.pairing.proposal,
-      async (proposal: PairingTypes.Proposal) => {
-        console.debug('CLIENT_EVENTS.pairing.proposal');
-        const uri = proposal.signal.params.uri;
-        this.events.emit(SIGNER_EVENTS.uri, uri);
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.pairing.updated,
-      async (_pairing: PairingTypes.Settled) => {
-        console.debug('CLIENT_EVENTS.pairing.updated');
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.pairing.created,
-      async (_pairing: PairingTypes.Settled) => {
-        console.debug('CLIENT_EVENTS.pairing.created');
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.pairing.deleted,
-      async (_pairing: PairingTypes.Settled) => {
-        console.debug('CLIENT_EVENTS.pairing.deleted');
-      },
-    );
+    this.client.on(CLIENT_EVENTS.pairing.proposal, async (proposal: PairingTypes.Proposal) => {
+      console.debug('CLIENT_EVENTS.pairing.proposal');
+      const uri = proposal.signal.params.uri;
+      this.events.emit(SIGNER_EVENTS.uri, uri);
+    });
+    this.client.on(CLIENT_EVENTS.pairing.updated, async (_pairing: PairingTypes.Settled) => {
+      console.debug('CLIENT_EVENTS.pairing.updated');
+    });
+    this.client.on(CLIENT_EVENTS.pairing.created, async (_pairing: PairingTypes.Settled) => {
+      console.debug('CLIENT_EVENTS.pairing.created');
+    });
+    this.client.on(CLIENT_EVENTS.pairing.deleted, async (_pairing: PairingTypes.Settled) => {
+      console.debug('CLIENT_EVENTS.pairing.deleted');
+    });
   }
 }
 
-// async getClient() {
-//   if (this.initializing) {
-//     return new Promise<WalletConnectClient>((resolve, reject) => {
-//       this.events.once('initialized', () => {
-//         if (typeof this.client === 'undefined') {
-//           reject(new Error('Client not initialized'));
-//         }
-//         resolve(this.client);
-//       });
-//     });
-//   }
+// Not implemented function
+// connectUnchecked(): WalletConnectSigner {
+//   return new WalletConnectSigner(this.opts, this.provider);
+// }
+// sendUncheckedTransaction(
+//   transaction: Deferrable<ethers.providers.TransactionRequest>,
+// ): Promise<string> {
+//   throw Error('Not implemented');
+// }
 
-//   this.initializing = true;
-//   this.client = await WalletConnectClient.init(this.opts.walletConnectOpts);
-//   this.initializing = false;
-//   this.events.emit('initialized');
-//   return this.client;
+// async _signTypedData(
+//   domain: TypedDataDomain,
+//   types: Record<string, Array<ethersTypedDataField>>,
+//   value: Record<string, any>,
+// ): Promise<string> {
+//   throw Error('Not implemented');
+// }
+// async unlock(password: string): Promise<boolean> {
+//   throw Error('Not implemented');
 // }

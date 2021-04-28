@@ -16,15 +16,13 @@ We're hiring. If you're a full-stack dApp developer, we want you! 👈 This is a
 ```ts
 import { WalletConnectSigner } from '@symfoni/walletconnect-v2-ethers-signer';
 // Create a signer with a RPC endpoint
-return new WalletConnectSigner({
-  qrModal: false,
-}).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
+return new WalletConnectSigner().connect(new ethers.providers.JsonRpcProvider(RPC_URL));
 
 // Listen for URI
-walletConnectSigner.on(SIGNER_EVENTS.uri, ({ uri }) => {
-  // use URI to pair with Wallet
+walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
+  // Show URI so that a wallet can pair (not handled here yet)
 });
-await walletConnectSigner.open();
+await walletConnectSigner.open(); // This will either trigger a session creation where an URI will be created, else it will connect to old session
 const address = await walletConnectSigner.getAddress();
 ```
 

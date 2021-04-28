@@ -5,13 +5,12 @@ import { TestNetwork } from 'ethereum-test-network';
 import { ERC20Token__factory } from '../__test__utils__/ERC20Token__factory';
 
 const CHAIN_ID = 123;
-const PORT = 8545;
+const PORT = 8549;
 const RPC_URL = `http://localhost:${PORT}`;
 const DEFAULT_GENESIS_ACCOUNTS = [
   {
     balance: '0x295BE96E64066972000000',
-    privateKey:
-      '0xa3dac6ca0b1c61f5f0a0b3a0acf93c9a52fd94e8e33d243d3b3a8b8c5dc37f0b', // 0xaaE062157B53077da1414ec3579b4CBdF7a4116f
+    privateKey: '0xa3dac6ca0b1c61f5f0a0b3a0acf93c9a52fd94e8e33d243d3b3a8b8c5dc37f0b', // 0xaaE062157B53077da1414ec3579b4CBdF7a4116f
   },
 ];
 
@@ -33,10 +32,10 @@ const getAppClient = () => {
   return new WalletConnectSigner({
     chainId: CHAIN_ID,
     walletConnectOpts: {
-      // storageOptions: {
-      //   database: 'WalletConnectSigner.db',
-      //   tableName: 'test_1',
-      // },
+      storageOptions: {
+        database: 'WalletConnectSigner.db',
+        tableName: 'test_1',
+      },
       logger: 'warn',
     },
   }).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
@@ -65,11 +64,9 @@ describe('WalletConnectSigner', () => {
     });
     await walletConnectSigner.open();
     const address = await walletConnectSigner.getAddress();
-    expect(address).toContain(
-      new ethers.Wallet(DEFAULT_GENESIS_ACCOUNTS[0].privateKey).address,
-    );
     await walletClient.close();
     await walletConnectSigner.close();
+    expect(address).toContain(new ethers.Wallet(DEFAULT_GENESIS_ACCOUNTS[0].privateKey).address);
   });
 
   // eslint-disable-next-line jest/no-disabled-tests
