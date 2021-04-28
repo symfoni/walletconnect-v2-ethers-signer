@@ -10,18 +10,17 @@ import {
 import { Bytes, ethers, Signer } from 'ethers';
 import { Deferrable } from 'ethers/lib/utils';
 import { EventEmitter } from 'events';
-import WalletConnectQRCodeModal from '@walletconnect/qrcode-modal';
-import { QRCodeModalOptions } from '@walletconnect/qrcode-modal/dist/cjs/types';
 
 export const SIGNER_EVENTS = {
-  init: 'signer_init',
-  uri: 'signer_uri',
+  init: 'init',
+  uri: 'uri',
+  open: 'open',
+  close: 'close',
+  statusUpdate: 'status_update',
 };
 
 export interface WalletConnectSignerOpts {
   chainId?: number;
-  qrModal: boolean;
-  qrModalOpts: QRCodeModalOptions;
   methods: string[];
   blockchain: string;
   walletConnectOpts: Partial<ClientOptions>;
@@ -29,8 +28,6 @@ export interface WalletConnectSignerOpts {
 
 const DEFAULT: WalletConnectSignerOpts = {
   chainId: undefined,
-  qrModal: true,
-  qrModalOpts: {},
   methods: [
     'eth_sendTransaction',
     'personal_sign',
@@ -112,15 +109,60 @@ export class WalletConnectSigner extends Signer {
     this.events.off(event, listener);
   }
 
-  // public waitFor(event: string): Promise<any> {
-  //   return new Promise((resolve) => {
-  //     this.events.once(event, (event) => {
-  //       resolve(event);
-  //     });
-  //   });
-  // }
   get isWalletConnect() {
     return true;
+  }
+
+  // Returns a new instance of the Signer, connected to provider.
+  // This MAY throw if changing providers is not supported.
+  connect(provider: ethers.providers.Provider): WalletConnectSigner {
+    return new WalletConnectSigner(this.opts, provider);
+  }
+
+  public async open(): Promise<void> {
+    this.pending = true;
+    const client = await this.register();
+    let chainId = undefined;
+    if (this.provider) {
+      const network = await this.provider.getNetwork();
+      chainId = network.chainId;
+    } else {
+      chainId = this.opts.chainId;
+    }
+    if (!chainId) {
+      throw Error(
+        'WalletConnectSigner must be initialized with a chainId when no provider is connected or the provider is unable to provide chainId.',
+      );
+    }
+    const { blockchain } = this.opts;
+    const { metadata } = this.opts.walletConnectOpts;
+    this.session = await client.connect({
+      metadata,
+      permissions: {
+        blockchain: {
+          chains: [`${blockchain}:${chainId}`],
+        },
+        jsonrpc: {
+          methods: this.opts.methods,
+        },
+      },
+    });
+    this.onOpen();
+  }
+
+  public async close() {
+    if (typeof this.session === 'undefined') {
+      return;
+    }
+    const client = await this.register();
+    await client.disconnect({
+      topic: this.session.topic,
+      reason: {
+        code: 123,
+        message: 'WalletConnectSigner closed.',
+      },
+    });
+    this.onClose();
   }
 
   public async getAddress() {
@@ -178,60 +220,6 @@ export class WalletConnectSigner extends Signer {
     return res as string;
   }
 
-  // Returns a new instance of the Signer, connected to provider.
-  // This MAY throw if changing providers is not supported.
-  connect(provider: ethers.providers.Provider): WalletConnectSigner {
-    return new WalletConnectSigner(this.opts, provider);
-  }
-
-  public async open(): Promise<void> {
-    this.pending = true;
-    const client = await this.register();
-    let chainId = undefined;
-    if (this.provider) {
-      const network = await this.provider.getNetwork();
-      chainId = network.chainId;
-    } else {
-      chainId = this.opts.chainId;
-    }
-    console.log(chainId);
-    if (!chainId) {
-      throw Error(
-        'WalletConnectSigner must be initialized with a chainId when no provider is connected or the provider is unable to provide chainId.',
-      );
-    }
-    const { blockchain } = this.opts;
-    const { metadata } = this.opts.walletConnectOpts;
-    this.session = await client.connect({
-      metadata,
-      permissions: {
-        blockchain: {
-          chains: [`${blockchain}:${chainId}`],
-        },
-        jsonrpc: {
-          methods: this.opts.methods,
-        },
-      },
-    });
-    console.log('got sessions');
-    this.onOpen();
-  }
-
-  public async close() {
-    if (typeof this.session === 'undefined') {
-      return;
-    }
-    const client = await this.register();
-    await client.disconnect({
-      topic: this.session.topic,
-      reason: {
-        code: 123,
-        message: 'WalletConnectSigner closed.',
-      },
-    });
-    this.onClose();
-  }
-
   // ---------- Private ----------------------------------------------- //
 
   private async register(opts?: IClient | ClientOptions): Promise<IClient> {
@@ -266,7 +254,7 @@ export class WalletConnectSigner extends Signer {
     if (this.client) {
       this.client = undefined;
     }
-    this.events.emit('close');
+    this.events.emit(SIGNER_EVENTS.close);
   }
 
   private onOpen(session?: SessionTypes.Settled) {
@@ -274,7 +262,7 @@ export class WalletConnectSigner extends Signer {
     if (session) {
       this.session = session;
     }
-    this.events.emit('open');
+    this.events.emit(SIGNER_EVENTS.close);
   }
 
   private async updateState(session: SessionTypes.Settled) {
@@ -286,13 +274,12 @@ export class WalletConnectSigner extends Signer {
         this.provider.emit('accountsChanged', accounts);
       }
     }
-    this.events.emit('stateUpdated', true);
+    this.events.emit(SIGNER_EVENTS.statusUpdate, true);
     // TODO chainChanged, networkChanged, rpcChanged, BlockchainChanged? :D
   }
 
   private registerEventListeners() {
     if (typeof this.client === 'undefined') return;
-    console.log('App listening');
     // Sessions
     this.client.on(
       CLIENT_EVENTS.session.updated,
@@ -322,16 +309,7 @@ export class WalletConnectSigner extends Signer {
       async (proposal: PairingTypes.Proposal) => {
         console.debug('CLIENT_EVENTS.pairing.proposal');
         const uri = proposal.signal.params.uri;
-        this.events.emit(SIGNER_EVENTS.uri, { uri });
-        if (this.opts.qrModal) {
-          WalletConnectQRCodeModal.open(
-            uri,
-            () => {
-              console.log('Modal open');
-            },
-            this.opts.qrModalOpts,
-          );
-        }
+        this.events.emit(SIGNER_EVENTS.uri, uri);
       },
     );
     this.client.on(

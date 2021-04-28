@@ -32,7 +32,6 @@ const getWalletClient = () => {
 const getAppClient = () => {
   return new WalletConnectSigner({
     chainId: CHAIN_ID,
-    qrModal: false,
     walletConnectOpts: {
       // storageOptions: {
       //   database: 'WalletConnectSigner.db',
@@ -61,7 +60,7 @@ describe('WalletConnectSigner', () => {
     const walletClient = getWalletClient();
     const walletConnectSigner = getAppClient();
     console.log(0);
-    walletConnectSigner.on(SIGNER_EVENTS.uri, ({ uri }) => {
+    walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
       return walletClient.pair(uri);
     });
     await walletConnectSigner.open();
@@ -78,7 +77,7 @@ describe('WalletConnectSigner', () => {
     const walletClient = getWalletClient();
     const walletConnectSigner = getAppClient();
     console.log(0);
-    walletConnectSigner.on(SIGNER_EVENTS.uri, ({ uri }) => {
+    walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
       return walletClient.pair(uri);
     });
     await walletConnectSigner.open();
