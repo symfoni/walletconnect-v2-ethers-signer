@@ -120,7 +120,6 @@ export class WalletConnectSigner extends Signer {
 
     const { blockchain } = this.opts;
     const { metadata } = this.opts.walletConnectOpts;
-    console.log(this.client.session.settled.topics);
     // const supportedSession = this.client.session.settled.topics
     const supportedSession = this.client.session.values.find((session) => {
       // TODO handle expiry
@@ -136,11 +135,21 @@ export class WalletConnectSigner extends Signer {
         return false;
       });
       if (foundUnsupportedMethod) {
-        console.debug(`Session does not support method ${foundUnsupportedMethod}`);
         return false;
       }
       return true;
     });
+    // REVIEW Just delete all pending pairing request
+    client.pairing.history.pending.forEach((pairing) => {
+      this.client.pairing.delete({
+        topic: pairing.topic,
+        reason: {
+          code: 123,
+          message: 'User requested new pairing',
+        },
+      });
+    });
+
     if (supportedSession) {
       console.log('connected to old session');
       this.session = await this.client.session.settled.get(supportedSession.topic);
