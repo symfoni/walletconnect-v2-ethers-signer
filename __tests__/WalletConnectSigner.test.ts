@@ -19,10 +19,10 @@ const getWalletClient = () => {
     rpcURL: RPC_URL,
     privateKey: DEFAULT_GENESIS_ACCOUNTS[0].privateKey,
     walletConnectOpts: {
-      storageOptions: {
-        database: 'WalletClient.db',
-        tableName: 'test_' + Math.floor(Math.random() * 99999).toString(),
-      },
+      // storageOptions: {
+      //   database: 'WalletClient.db',
+      //   tableName: 'test_' + Math.floor(Math.random() * 99999).toString(),
+      // },
       logger: 'warn',
     },
   });
@@ -32,10 +32,10 @@ const getAppClient = () => {
   return new WalletConnectSigner({
     chainId: CHAIN_ID,
     walletConnectOpts: {
-      storageOptions: {
-        database: 'WalletConnectSigner.db',
-        tableName: 'test_1',
-      },
+      // storageOptions: {
+      //   database: 'WalletConnectSigner.db',
+      //   tableName: 'test_1',
+      // },
       logger: 'warn',
     },
   }).connect(new ethers.providers.JsonRpcProvider(RPC_URL));

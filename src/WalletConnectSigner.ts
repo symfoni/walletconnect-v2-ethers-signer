@@ -140,15 +140,15 @@ export class WalletConnectSigner extends Signer {
       return true;
     });
     // REVIEW Just delete all pending pairing request
-    client.pairing.history.pending.forEach((pairing) => {
-      this.client.pairing.delete({
-        topic: pairing.topic,
-        reason: {
-          code: 123,
-          message: 'User requested new pairing',
-        },
-      });
-    });
+    // client.pairing.history.pending.forEach((pairing) => {
+    //   this.client.pairing.delete({
+    //     topic: pairing.topic,
+    //     reason: {
+    //       code: 123,
+    //       message: 'User requested new pairing',
+    //     },
+    //   });
+    // });
 
     if (supportedSession) {
       console.log('connected to old session');
