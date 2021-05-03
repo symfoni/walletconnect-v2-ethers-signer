@@ -103,8 +103,14 @@ export class WalletConnectSigner extends Signer {
     return new WalletConnectSigner(this.opts, provider);
   }
 
-  public async reOpen() {
+  public async open(opts: { onlyReconnect: boolean } = { onlyReconnect: false }): Promise<void> {
+    this.pending = true;
+    const client = await this.register();
     const chainId = await this.getChainId();
+
+    const { blockchain } = this.opts;
+    const { metadata } = this.opts.walletConnectOpts;
+    // const supportedSession = this.client.session.settled.topics
     const supportedSession = this.client.session.values.find((session) => {
       // TODO handle expiry
       // Are we on same blockchain:chainId
@@ -124,28 +130,11 @@ export class WalletConnectSigner extends Signer {
       }
       return true;
     });
-
     if (supportedSession) {
-      console.log('ReOpen old session with topic', supportedSession.topic);
+      console.log('ReOpen session with topic', supportedSession.topic);
       this.session = await this.client.session.settled.get(supportedSession.topic);
       this.updateState(this.session);
-      this.onOpen();
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  public async open(): Promise<void> {
-    this.pending = true;
-    const client = await this.register();
-    const chainId = await this.getChainId();
-
-    const { blockchain } = this.opts;
-    const { metadata } = this.opts.walletConnectOpts;
-    // const supportedSession = this.client.session.settled.topics
-    const reOpen = await this.reOpen();
-    if (!reOpen) {
+    } else if (!opts.onlyReconnect) {
       this.session = await client.connect({
         metadata,
         permissions: {
@@ -157,8 +146,8 @@ export class WalletConnectSigner extends Signer {
           },
         },
       });
-      this.onOpen();
     }
+    this.onOpen();
   }
 
   public async close() {
