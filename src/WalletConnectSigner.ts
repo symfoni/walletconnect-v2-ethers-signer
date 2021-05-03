@@ -103,27 +103,12 @@ export class WalletConnectSigner extends Signer {
     return new WalletConnectSigner(this.opts, provider);
   }
 
-  public async open(): Promise<void> {
-    this.pending = true;
-    const client = await this.register();
-    let chainId = undefined;
-    if (this.provider) {
-      const network = await this.provider.getNetwork();
-      chainId = network.chainId;
-    } else {
-      chainId = this.opts.chainId;
-    }
-    if (!chainId) {
-      throw Error('WalletConnectSigner must be initialized with a chainId when no provider is connected or the provider is unable to provide chainId.');
-    }
-    // Check for exsisting sessions
-
-    const { blockchain } = this.opts;
-    const { metadata } = this.opts.walletConnectOpts;
-    // const supportedSession = this.client.session.settled.topics
+  public async tryReOpen() {
+    const chainId = await this.getChainId();
     const supportedSession = this.client.session.values.find((session) => {
       // TODO handle expiry
       // Are we on same blockchain:chainId
+      const { blockchain } = this.opts;
       if (session.permissions.blockchain.chains.indexOf(`${blockchain}:${chainId}`) === -1) {
         console.debug(`Session does not support  ${blockchain}:${chainId}`);
         return false;
@@ -139,22 +124,27 @@ export class WalletConnectSigner extends Signer {
       }
       return true;
     });
-    // REVIEW Just delete all pending pairing request
-    // client.pairing.history.pending.forEach((pairing) => {
-    //   this.client.pairing.delete({
-    //     topic: pairing.topic,
-    //     reason: {
-    //       code: 123,
-    //       message: 'User requested new pairing',
-    //     },
-    //   });
-    // });
 
     if (supportedSession) {
-      console.log('connected to old session');
+      console.log('ReOpen old session with topic', supportedSession.topic);
       this.session = await this.client.session.settled.get(supportedSession.topic);
       this.updateState(this.session);
+      return true;
     } else {
+      return false;
+    }
+  }
+
+  public async open(): Promise<void> {
+    this.pending = true;
+    const client = await this.register();
+    const chainId = await this.getChainId();
+
+    const { blockchain } = this.opts;
+    const { metadata } = this.opts.walletConnectOpts;
+    // const supportedSession = this.client.session.settled.topics
+    const reOpen = await this.tryReOpen();
+    if (!reOpen) {
       this.session = await client.connect({
         metadata,
         permissions: {
@@ -167,6 +157,7 @@ export class WalletConnectSigner extends Signer {
         },
       });
     }
+
     this.onOpen();
   }
 
@@ -238,6 +229,20 @@ export class WalletConnectSigner extends Signer {
     return res as string;
   }
 
+  async getChainId() {
+    let chainId = undefined;
+    if (this.provider) {
+      const network = await this.provider.getNetwork();
+      chainId = network.chainId;
+    } else {
+      chainId = this.opts.chainId;
+    }
+    if (!chainId) {
+      throw Error('WalletConnectSigner must be initialized with a chainId when no provider is connected or the provider is unable to provide chainId.');
+    }
+    return chainId;
+  }
+
   // ---------- Private ----------------------------------------------- //
 
   private async register(opts?: IClient | ClientOptions): Promise<IClient> {
@@ -280,7 +285,7 @@ export class WalletConnectSigner extends Signer {
     if (session) {
       this.session = session;
     }
-    this.events.emit(SIGNER_EVENTS.close);
+    this.events.emit(SIGNER_EVENTS.open);
   }
 
   private async updateState(session: SessionTypes.Settled) {
