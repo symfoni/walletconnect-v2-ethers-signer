@@ -129,6 +129,7 @@ export class WalletConnectSigner extends Signer {
       console.log('ReOpen old session with topic', supportedSession.topic);
       this.session = await this.client.session.settled.get(supportedSession.topic);
       this.updateState(this.session);
+      this.onOpen();
       return true;
     } else {
       return false;
@@ -156,9 +157,8 @@ export class WalletConnectSigner extends Signer {
           },
         },
       });
+      this.onOpen();
     }
-
-    this.onOpen();
   }
 
   public async close() {
