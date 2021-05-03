@@ -103,7 +103,7 @@ export class WalletConnectSigner extends Signer {
     return new WalletConnectSigner(this.opts, provider);
   }
 
-  public async tryReOpen() {
+  public async reOpen() {
     const chainId = await this.getChainId();
     const supportedSession = this.client.session.values.find((session) => {
       // TODO handle expiry
@@ -144,7 +144,7 @@ export class WalletConnectSigner extends Signer {
     const { blockchain } = this.opts;
     const { metadata } = this.opts.walletConnectOpts;
     // const supportedSession = this.client.session.settled.topics
-    const reOpen = await this.tryReOpen();
+    const reOpen = await this.reOpen();
     if (!reOpen) {
       this.session = await client.connect({
         metadata,
