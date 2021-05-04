@@ -146,6 +146,8 @@ export class WalletConnectSigner extends Signer {
           },
         },
       });
+    } else {
+      console.debug('No supportedSession and onlyReconnect');
     }
     this.onOpen();
   }
@@ -212,6 +214,24 @@ export class WalletConnectSigner extends Signer {
       request: {
         method: 'eth_signTransaction',
         params: [transaction],
+      },
+      topic: this.session.topic,
+    });
+    return res as string;
+  }
+
+  async request(method: string, params: unknown[]) {
+    if (typeof this.client === 'undefined') {
+      this.client = await this.register();
+      if (!this.connected) await this.open();
+    }
+    if (typeof this.session === 'undefined') {
+      throw new Error('Signer connection is missing session');
+    }
+    const res = await this.client.request({
+      request: {
+        method: method,
+        params: params,
       },
       topic: this.session.topic,
     });

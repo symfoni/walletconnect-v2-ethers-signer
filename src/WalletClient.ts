@@ -1,19 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Client, CLIENT_EVENTS } from '@walletconnect/client';
-import {
-  ClientOptions,
-  IClient,
-  PairingTypes,
-  SessionTypes,
-} from '@walletconnect/types';
+import { ClientOptions, IClient, PairingTypes, SessionTypes } from '@walletconnect/types';
 import { ethers } from 'ethers';
 import { EventEmitter } from 'events';
 
 function isClient(opts?: IClient | ClientOptions): opts is IClient {
-  return (
-    typeof opts !== 'undefined' &&
-    typeof (opts as IClient).context !== 'undefined'
-  );
+  return typeof opts !== 'undefined' && typeof (opts as IClient).context !== 'undefined';
 }
 export interface WalletClientOpts {
   privateKey: string;
@@ -21,8 +13,7 @@ export interface WalletClientOpts {
   walletConnectOpts: ClientOptions;
 }
 export const DEFAULT: WalletClientOpts = {
-  privateKey:
-    '0xaa3e538de51965294585ec80092ce534d3042c0b8f47e5c17b8c8259ddf6c79c',
+  privateKey: '0xaa3e538de51965294585ec80092ce534d3042c0b8f47e5c17b8c8259ddf6c79c',
   rpcURL: 'http://localhost:8545',
   walletConnectOpts: {
     metadata: {
@@ -97,16 +88,14 @@ export class WalletClient {
     }
     try {
       if (requestEvent.request.method === 'eth_signTransaction') {
-        const populatedTx = await this.signer.populateTransaction(
-          requestEvent.request.params[0],
-        );
+        const populatedTx = await this.signer.populateTransaction(requestEvent.request.params[0]);
         const parsedTx: ethers.providers.TransactionRequest = {
           ...populatedTx,
           gasLimit: ethers.BigNumber.from(populatedTx.gasLimit).toHexString(),
           gasPrice: ethers.BigNumber.from(populatedTx.gasPrice).toHexString(),
         };
         const signedTransaction = await this.signer.signTransaction(parsedTx);
-        await this.client.respond({
+        return await this.client.respond({
           topic: requestEvent.topic,
           response: {
             result: signedTransaction,
@@ -114,11 +103,20 @@ export class WalletClient {
             jsonrpc: requestEvent.request.jsonrpc,
           },
         });
-      } else {
-        throw Error(
-          'WalletClient not implemented method ' + requestEvent.request.method,
-        );
       }
+      console.log(requestEvent);
+      console.log(requestEvent.request.method);
+      if (requestEvent.request.method === 'oracle_data') {
+        return await this.client.respond({
+          topic: requestEvent.topic,
+          response: {
+            result: 'success' + requestEvent.request.params[0],
+            id: requestEvent.request.id,
+            jsonrpc: requestEvent.request.jsonrpc,
+          },
+        });
+      }
+      throw Error('WalletClient not implemented method ' + requestEvent.request.method);
     } catch (error) {
       console.error(error);
       await this.client.respond({
@@ -175,70 +173,44 @@ export class WalletClient {
     if (typeof this.client === 'undefined') return;
     console.log('Wallet listening');
     // Sessions
-    this.client.on(
-      CLIENT_EVENTS.session.updated,
-      (_session: SessionTypes.Settled) => {
-        console.debug('WALLET_EVENTS.session.updated');
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.session.created,
-      (_session: SessionTypes.Settled) => {
-        console.debug('WALLET_EVENTS.session.created');
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.session.deleted,
-      (_session: SessionTypes.Settled) => {
-        // console.debug('WALLET_EVENTS.session.deleted');
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.session.request,
-      async (requestEvent: SessionTypes.RequestEvent) => {
-        console.log('WalletClient: session.request', requestEvent);
-        const session = this.client.session.values.find(
-          (session) => session.topic === requestEvent.topic,
-        );
-        if (!session) {
-          throw Error('No active session found for request');
-        }
-        await this.approveRequest(requestEvent);
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.session.proposal,
-      async (proposal: SessionTypes.Proposal) => {
-        console.debug('WALLET_EVENTS.pairing.proposal');
-        const metadata = this.opts.walletConnectOpts.metadata;
-        const network = await this.provider.getNetwork();
-        const response: SessionTypes.Response = {
-          state: {
-            accounts: [`${this.signer.address + '@eip155:' + network.chainId}`],
-          },
-          metadata,
-        };
-        await this.client.approve({ proposal, response });
-      },
-    );
+    this.client.on(CLIENT_EVENTS.session.updated, (_session: SessionTypes.Settled) => {
+      console.debug('WALLET_EVENTS.session.updated');
+    });
+    this.client.on(CLIENT_EVENTS.session.created, (_session: SessionTypes.Settled) => {
+      console.debug('WALLET_EVENTS.session.created');
+    });
+    this.client.on(CLIENT_EVENTS.session.deleted, (_session: SessionTypes.Settled) => {
+      // console.debug('WALLET_EVENTS.session.deleted');
+    });
+    this.client.on(CLIENT_EVENTS.session.request, async (requestEvent: SessionTypes.RequestEvent) => {
+      console.log('WalletClient: session.request', requestEvent);
+      const session = this.client.session.values.find((session) => session.topic === requestEvent.topic);
+      if (!session) {
+        throw Error('No active session found for request');
+      }
+      await this.approveRequest(requestEvent);
+    });
+    this.client.on(CLIENT_EVENTS.session.proposal, async (proposal: SessionTypes.Proposal) => {
+      console.debug('WALLET_EVENTS.pairing.proposal');
+      const metadata = this.opts.walletConnectOpts.metadata;
+      const network = await this.provider.getNetwork();
+      const response: SessionTypes.Response = {
+        state: {
+          accounts: [`${this.signer.address + '@eip155:' + network.chainId}`],
+        },
+        metadata,
+      };
+      await this.client.approve({ proposal, response });
+    });
     // Pairing
-    this.client.on(
-      CLIENT_EVENTS.pairing.updated,
-      (_pairing: PairingTypes.Settled) => {
-        console.debug('WALLET_EVENTS.pairing.updated');
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.pairing.created,
-      (_pairing: PairingTypes.Settled) => {
-        console.debug('WALLET_EVENTS.pairing.created');
-      },
-    );
-    this.client.on(
-      CLIENT_EVENTS.pairing.deleted,
-      (_pairing: PairingTypes.Settled) => {
-        console.debug('WALLET_EVENTS.pairing.deleted');
-      },
-    );
+    this.client.on(CLIENT_EVENTS.pairing.updated, (_pairing: PairingTypes.Settled) => {
+      console.debug('WALLET_EVENTS.pairing.updated');
+    });
+    this.client.on(CLIENT_EVENTS.pairing.created, (_pairing: PairingTypes.Settled) => {
+      console.debug('WALLET_EVENTS.pairing.created');
+    });
+    this.client.on(CLIENT_EVENTS.pairing.deleted, (_pairing: PairingTypes.Settled) => {
+      console.debug('WALLET_EVENTS.pairing.deleted');
+    });
   }
 }

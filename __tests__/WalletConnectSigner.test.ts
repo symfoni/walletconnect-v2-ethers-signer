@@ -31,6 +31,7 @@ const getWalletClient = () => {
 const getAppClient = () => {
   return new WalletConnectSigner({
     chainId: CHAIN_ID,
+    methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTransaction', 'oracle_data'],
     walletConnectOpts: {
       // storageOptions: {
       //   database: 'WalletConnectSigner.db',
@@ -58,7 +59,6 @@ describe('WalletConnectSigner', () => {
   it('should initiate', async () => {
     const walletClient = getWalletClient();
     const walletConnectSigner = getAppClient();
-    console.log(0);
     walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
       return walletClient.pair(uri);
     });
@@ -73,59 +73,35 @@ describe('WalletConnectSigner', () => {
   it('should deploy erc20', async () => {
     const walletClient = getWalletClient();
     const walletConnectSigner = getAppClient();
-    console.log(0);
     walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
       return walletClient.pair(uri);
     });
     await walletConnectSigner.open();
     const address = await walletConnectSigner.getAddress();
     const erc20Factory = new ERC20Token__factory(walletConnectSigner);
-    console.log(2);
     const erc20 = await erc20Factory.deploy('The test token', 'tst', 18);
-    console.log(3);
     await erc20.deployed();
-    console.log(4);
     const balanceToMint = ethers.utils.parseEther('500');
-    console.log(address);
     const mintTx = await erc20.mint(address, balanceToMint);
     await mintTx.wait();
     const tokenBalance = await erc20.balanceOf(address);
-    console.log('tokenBalance', tokenBalance.toString());
     await walletConnectSigner.close();
     await walletClient.close();
     expect(tokenBalance.eq(balanceToMint)).toBeTruthy();
   });
 
-  // it('pending request', async () => {
-  //   const walletClient = getWalletClient();
-  //   const walletConnectSigner = getAppClient();
-  //   console.log(0);
-  //   walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
-  //     console.log('show uri', uri);
-  //     // return walletClient.pair(uri);
-  //   });
-  //   walletConnectSigner.open();
+  it('custom request', async () => {
+    const walletClient = getWalletClient();
+    const walletConnectSigner = getAppClient();
+    walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
+      return walletClient.pair(uri);
+    });
+    await walletConnectSigner.open();
+    const param = 1;
+    const request = await walletConnectSigner.request('oracle_data', [param]);
+    console.log(request);
 
-  //   walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
-  //     // console.log('show uri', uri);
-  //     return walletClient.pair(uri);
-  //   });
-  //   await walletConnectSigner.open();
-  //   const address = await walletConnectSigner.getAddress();
-  //   const erc20Factory = new ERC20Token__factory(walletConnectSigner);
-  //   console.log(2);
-  //   const erc20 = await erc20Factory.deploy('The test token', 'tst', 18);
-  //   console.log(3);
-  //   await erc20.deployed();
-  //   console.log(4);
-  //   const balanceToMint = ethers.utils.parseEther('500');
-  //   console.log(address);
-  //   const mintTx = await erc20.mint(address, balanceToMint);
-  //   await mintTx.wait();
-  //   const tokenBalance = await erc20.balanceOf(address);
-  //   console.log('tokenBalance', tokenBalance.toString());
-  //   await walletConnectSigner.close();
-  //   await walletClient.close();
-  //   expect(tokenBalance.eq(balanceToMint)).toBeTruthy();
-  // });
+    expect(request).toContain('success');
+    expect(request).toContain(param);
+  });
 });
