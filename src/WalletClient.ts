@@ -104,8 +104,6 @@ export class WalletClient {
           },
         });
       }
-      console.log(requestEvent);
-      console.log(requestEvent.request.method);
       if (requestEvent.request.method === 'oracle_data') {
         return await this.client.respond({
           topic: requestEvent.topic,
