@@ -3,7 +3,7 @@ import { SIGNER_EVENTS, WalletConnectSigner } from '../src/index';
 import { WalletClient } from '../src/WalletClient';
 import { TestNetwork } from 'ethereum-test-network';
 import { ERC20Token__factory } from '../__test__utils__/ERC20Token__factory';
-
+import { unlinkSync } from 'fs';
 const CHAIN_ID = 123;
 const PORT = 8549;
 const RPC_URL = `http://localhost:${PORT}`;
@@ -19,30 +19,38 @@ const getWalletClient = () => {
     rpcURL: RPC_URL,
     privateKey: DEFAULT_GENESIS_ACCOUNTS[0].privateKey,
     walletConnectOpts: {
-      // storageOptions: {
-      //   database: 'WalletClient.db',
-      //   tableName: 'test_' + Math.floor(Math.random() * 99999).toString(),
-      // },
+      storageOptions: {
+        database: 'test.db',
+        tableName: 'wallet_client',
+      },
       logger: 'warn',
     },
   });
 };
 
 const getAppClient = () => {
-  return new WalletConnectSigner({
-    chainId: CHAIN_ID,
-    methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTransaction', 'oracle_data'],
-    walletConnectOpts: {
-      // storageOptions: {
-      //   database: 'WalletConnectSigner.db',
-      //   tableName: 'test_1',
-      // },
-      logger: 'warn',
+  const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+  return new WalletConnectSigner(
+    {
+      chainId: CHAIN_ID,
+      methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTransaction', 'oracle_data'],
+      walletConnectOpts: {
+        storageOptions: {
+          database: 'test.db',
+          tableName: 'app_client',
+        },
+        logger: 'warn',
+      },
     },
-  }).connect(new ethers.providers.JsonRpcProvider(RPC_URL));
+    provider,
+  );
 };
 describe('WalletConnectSigner', () => {
   let testnetwork: TestNetwork;
+
+  afterAll(() => {
+    unlinkSync('test.db');
+  });
 
   beforeEach(async () => {
     testnetwork = await TestNetwork.init({
@@ -104,4 +112,24 @@ describe('WalletConnectSigner', () => {
     expect(request).toContain('success');
     expect(request).toContain(param);
   });
+
+  // it('reinit', async () => {
+  //   const walletClient = getWalletClient();
+  //   const walletConnectSigner = getAppClient();
+  //   walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
+  //     return walletClient.pair(uri);
+  //   });
+  //   await walletConnectSigner.open();
+  //   await walletConnectSigner.close();
+  //   await new Promise((resolve) => {
+  //     setTimeout(() => {
+  //       resolve(true);
+  //     }, 2000);
+  //   });
+  //   const request = await walletConnectSigner.request('oracle_data', [param]);
+  //   console.log(request);
+
+  //   expect(request).toContain('success');
+  //   expect(request).toContain(param);
+  // });
 });
