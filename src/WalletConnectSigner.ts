@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CLIENT_EVENTS, Client } from '@walletconnect/client';
 import { ClientOptions, IClient, PairingTypes, SessionTypes } from '@walletconnect/types';
+import { AccountId } from 'caip';
 import { Bytes, ethers, Signer } from 'ethers';
 import { Deferrable } from 'ethers/lib/utils';
 import { EventEmitter } from 'events';
@@ -171,7 +172,8 @@ export class WalletConnectSigner extends Signer {
     if (!this.accounts) {
       throw Error('client must be enabled before you can list accounts.');
     }
-    return this.accounts[0].split('@')[0];
+    // return this.accounts[0].split('@')[0];
+    return AccountId.parse(this.accounts[0]).address;
   }
 
   // Returns the signed prefixed-message. This MUST treat:

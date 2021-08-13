@@ -79,6 +79,7 @@ describe('WalletConnectSigner', () => {
 
   // eslint-disable-next-line jest/no-disabled-tests
   it('should deploy erc20', async () => {
+    jest.setTimeout(30000);
     const walletClient = getWalletClient();
     const walletConnectSigner = getAppClient();
     walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {

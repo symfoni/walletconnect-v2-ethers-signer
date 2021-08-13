@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Client, CLIENT_EVENTS } from '@walletconnect/client';
 import { ClientOptions, IClient, PairingTypes, SessionTypes } from '@walletconnect/types';
+import { AccountId } from 'caip';
 import { ethers } from 'ethers';
 import { EventEmitter } from 'events';
 
@@ -95,7 +96,7 @@ export class WalletClient {
           gasPrice: ethers.BigNumber.from(populatedTx.gasPrice).toHexString(),
         };
         const signedTransaction = await this.signer.signTransaction(parsedTx);
-        return await this.client.respond({
+        return this.client.respond({
           topic: requestEvent.topic,
           response: {
             result: signedTransaction,
@@ -194,7 +195,12 @@ export class WalletClient {
       const network = await this.provider.getNetwork();
       const response: SessionTypes.Response = {
         state: {
-          accounts: [`${this.signer.address + '@eip155:' + network.chainId}`],
+          accounts: [
+            AccountId.format({
+              chainId: { reference: network.chainId.toString(), namespace: 'eip155' },
+              address: this.signer.address,
+            }),
+          ],
         },
         metadata,
       };
