@@ -1,6 +1,6 @@
 {
   "name": "@symfoni/walletconnect-v2-ethers-signer",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "A Ethers compatible signer for Wallet Connect version 2.",
   "repository": "https://github.com/symfoni/walletconnect-v2-ethers-signer",
   "files": [
@@ -16,7 +16,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
-    "prepublish": "npm run build",
+    "prepublishOnly": "npm run build",
     "patch": "npm version patch --force",
     "publish:beta": "npm publish --tag beta"
   },

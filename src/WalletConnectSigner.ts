@@ -109,44 +109,26 @@ export class WalletConnectSigner extends Signer {
       this.pending = true;
       const client = await this.register();
       const chainId = await this.getChainId();
-
       const { blockchain } = this.opts;
       const { metadata } = this.opts.walletConnectOpts;
-      // const supportedSession = this.client.session.settled.topics
-      const supportedSession = this.client.session.values.find((session) => {
-        // TODO handle expiry
-        // Are we on same blockchain:chainId
-        const { blockchain } = this.opts;
-        if (session.permissions.blockchain.chains.indexOf(`${blockchain}:${chainId}`) === -1) {
-          console.debug(`Session does not support  ${blockchain}:${chainId}`);
-          return false;
-        }
-        const foundUnsupportedMethod = this.opts.methods.find((method) => {
-          if (session.permissions.jsonrpc.methods.indexOf(method) === -1) {
-            return true;
-          }
-          return false;
-        });
-        if (foundUnsupportedMethod) {
-          return false;
-        }
-        return true;
-      });
-      if (supportedSession) {
-        console.log('ReOpen session with topic', supportedSession.topic);
-        this.session = await this.client.session.settled.get(supportedSession.topic);
+      const permissions = {
+        blockchain: {
+          chains: [`${blockchain}:${chainId}`],
+        },
+        jsonrpc: {
+          methods: this.opts.methods,
+        },
+      };
+
+      const supportedSession = await this.client.session.find(permissions);
+
+      if (supportedSession.length > 0) {
+        console.log('ReOpen session with topic', supportedSession[0].topic);
         this.updateState(this.session);
       } else if (!opts.onlyReconnect) {
         this.session = await client.connect({
           metadata,
-          permissions: {
-            blockchain: {
-              chains: [`${blockchain}:${chainId}`],
-            },
-            jsonrpc: {
-              methods: this.opts.methods,
-            },
-          },
+          permissions,
         });
         this.updateState(this.session);
       } else {
