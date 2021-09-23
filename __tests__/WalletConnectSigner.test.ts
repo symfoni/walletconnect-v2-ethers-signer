@@ -65,12 +65,19 @@ describe('WalletConnectSigner', () => {
   });
 
   it('should initiate', async () => {
+    jest.setTimeout(30000);
     const walletClient = getWalletClient();
     const walletConnectSigner = getAppClient();
     walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
       return walletClient.pair(uri);
     });
     await walletConnectSigner.open();
+    // const sleep = new Promise((resolve) => {
+    //   setTimeout(() => {
+    //     resolve(true);
+    //   }, 1000);
+    // });
+    // await sleep;
     const address = await walletConnectSigner.getAddress();
     await walletClient.close();
     await walletConnectSigner.close();

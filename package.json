@@ -1,6 +1,6 @@
 {
   "name": "@symfoni/walletconnect-v2-ethers-signer",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "A Ethers compatible signer for Wallet Connect version 2.",
   "repository": "https://github.com/symfoni/walletconnect-v2-ethers-signer",
   "files": [
@@ -8,9 +8,21 @@
   ],
   "main": "./lib/index.js",
   "typings": "./lib/index.d.ts",
+  "scripts": {
+    "start": "node build/src/main.js",
+    "clean": "rimraf coverage build tmp",
+    "build": "tsc -p tsconfig.release.json",
+    "build:watch": "tsc -w -p tsconfig.release.json",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "prepublish": "npm run build",
+    "patch": "npm version patch --force",
+    "publish:beta": "npm publish --tag beta"
+  },
   "dependencies": {
-    "@walletconnect/client": "^2.0.0-beta.17",
-    "@walletconnect/types": "^2.0.0-beta.17",
+    "@walletconnect/client": "^2.0.0-beta.17.3",
+    "@walletconnect/types": "^2.0.0-beta.17.3",
     "caip": "^1.0.0",
     "ethers": "^5.1.3",
     "tslib": "~2.2.0"
@@ -30,17 +42,6 @@
     "ts-jest": "~26.5.5",
     "tsutils": "~3.21.0",
     "typescript": "~4.2.4"
-  },
-  "scripts": {
-    "start": "node build/src/main.js",
-    "clean": "rimraf coverage build tmp",
-    "build": "tsc -p tsconfig.release.json",
-    "build:watch": "tsc -w -p tsconfig.release.json",
-    "lint": "eslint . --ext .ts,.tsx",
-    "test": "jest --coverage",
-    "test:watch": "jest --watch",
-    "prepublish": "npm run build",
-    "patch": "npm version patch --force"
   },
   "author": "Jakub Synowiec <github@jakubsynowiec.info>",
   "license": "Apache-2.0",

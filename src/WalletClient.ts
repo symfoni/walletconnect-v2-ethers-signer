@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Client, CLIENT_EVENTS } from '@walletconnect/client';
-import { ClientOptions, IClient, PairingTypes, SessionTypes } from '@walletconnect/types';
+import { ClientOptions, IClient, PairingTypes, SessionTypes, ClientTypes } from '@walletconnect/types';
 import { AccountId } from 'caip';
 import { ethers } from 'ethers';
 import { EventEmitter } from 'events';
@@ -193,7 +193,7 @@ export class WalletClient {
       console.debug('WALLET_EVENTS.pairing.proposal');
       const metadata = this.opts.walletConnectOpts.metadata;
       const network = await this.provider.getNetwork();
-      const response: SessionTypes.Response = {
+      const response: ClientTypes.ResponseInput = {
         state: {
           accounts: [
             AccountId.format({
@@ -204,6 +204,7 @@ export class WalletClient {
         },
         metadata,
       };
+      console.log(response);
       await this.client.approve({ proposal, response });
     });
     // Pairing

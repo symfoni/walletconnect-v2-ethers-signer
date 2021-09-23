@@ -105,52 +105,58 @@ export class WalletConnectSigner extends Signer {
   }
 
   public async open(opts: { onlyReconnect: boolean } = { onlyReconnect: false }): Promise<void> {
-    this.pending = true;
-    const client = await this.register();
-    const chainId = await this.getChainId();
+    try {
+      this.pending = true;
+      const client = await this.register();
+      const chainId = await this.getChainId();
 
-    const { blockchain } = this.opts;
-    const { metadata } = this.opts.walletConnectOpts;
-    // const supportedSession = this.client.session.settled.topics
-    const supportedSession = this.client.session.values.find((session) => {
-      // TODO handle expiry
-      // Are we on same blockchain:chainId
       const { blockchain } = this.opts;
-      if (session.permissions.blockchain.chains.indexOf(`${blockchain}:${chainId}`) === -1) {
-        console.debug(`Session does not support  ${blockchain}:${chainId}`);
-        return false;
-      }
-      const foundUnsupportedMethod = this.opts.methods.find((method) => {
-        if (session.permissions.jsonrpc.methods.indexOf(method) === -1) {
-          return true;
+      const { metadata } = this.opts.walletConnectOpts;
+      // const supportedSession = this.client.session.settled.topics
+      const supportedSession = this.client.session.values.find((session) => {
+        // TODO handle expiry
+        // Are we on same blockchain:chainId
+        const { blockchain } = this.opts;
+        if (session.permissions.blockchain.chains.indexOf(`${blockchain}:${chainId}`) === -1) {
+          console.debug(`Session does not support  ${blockchain}:${chainId}`);
+          return false;
         }
-        return false;
+        const foundUnsupportedMethod = this.opts.methods.find((method) => {
+          if (session.permissions.jsonrpc.methods.indexOf(method) === -1) {
+            return true;
+          }
+          return false;
+        });
+        if (foundUnsupportedMethod) {
+          return false;
+        }
+        return true;
       });
-      if (foundUnsupportedMethod) {
-        return false;
+      if (supportedSession) {
+        console.log('ReOpen session with topic', supportedSession.topic);
+        this.session = await this.client.session.settled.get(supportedSession.topic);
+        this.updateState(this.session);
+      } else if (!opts.onlyReconnect) {
+        this.session = await client.connect({
+          metadata,
+          permissions: {
+            blockchain: {
+              chains: [`${blockchain}:${chainId}`],
+            },
+            jsonrpc: {
+              methods: this.opts.methods,
+            },
+          },
+        });
+        this.updateState(this.session);
+      } else {
+        console.debug('No supportedSession and onlyReconnect');
       }
-      return true;
-    });
-    if (supportedSession) {
-      console.log('ReOpen session with topic', supportedSession.topic);
-      this.session = await this.client.session.settled.get(supportedSession.topic);
-      this.updateState(this.session);
-    } else if (!opts.onlyReconnect) {
-      this.session = await client.connect({
-        metadata,
-        permissions: {
-          blockchain: {
-            chains: [`${blockchain}:${chainId}`],
-          },
-          jsonrpc: {
-            methods: this.opts.methods,
-          },
-        },
-      });
-    } else {
-      console.debug('No supportedSession and onlyReconnect');
+      this.onOpen();
+    } catch (error) {
+      console.log(error);
+      throw error;
     }
-    this.onOpen();
   }
 
   public async close() {
@@ -169,10 +175,10 @@ export class WalletConnectSigner extends Signer {
   }
 
   public async getAddress() {
+    console.log(this.accounts);
     if (!this.accounts) {
       throw Error('client must be enabled before you can list accounts.');
     }
-    // return this.accounts[0].split('@')[0];
     return AccountId.parse(this.accounts[0]).address;
   }
 
@@ -212,6 +218,11 @@ export class WalletConnectSigner extends Signer {
     if (typeof this.session === 'undefined') {
       throw new Error('Signer connection is missing session');
     }
+    transaction = {
+      ...transaction,
+      gasLimit: ethers.BigNumber.from(transaction.gasLimit).toHexString(),
+      gasPrice: ethers.BigNumber.from(transaction.gasPrice).toHexString(),
+    };
     const res = await this.client.request({
       request: {
         method: 'eth_signTransaction',
