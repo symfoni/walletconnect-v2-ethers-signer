@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { ethers } from 'ethers';
 import { SIGNER_EVENTS, WalletConnectSigner } from '../src/index';
 import { WalletClient } from '../src/WalletClient';
 import { TestNetwork } from 'ethereum-test-network';
 import { ERC20Token__factory } from '../__test__utils__/ERC20Token__factory';
 import { unlinkSync } from 'fs';
+
 const CHAIN_ID = 123;
 const PORT = 8549;
 const RPC_URL = `http://localhost:${PORT}`;
@@ -25,6 +27,7 @@ const getWalletClient = () => {
       },
       logger: 'warn',
     },
+    debug: true,
   });
 };
 
@@ -41,6 +44,7 @@ const getAppClient = () => {
         },
         logger: 'warn',
       },
+      debug: true,
     },
     provider,
   );
@@ -49,7 +53,9 @@ describe('WalletConnectSigner', () => {
   let testnetwork: TestNetwork;
 
   afterAll(() => {
-    unlinkSync('test.db');
+    setTimeout(() => {
+      unlinkSync('test.db');
+    }, 300);
   });
 
   beforeEach(async () => {
@@ -72,12 +78,23 @@ describe('WalletConnectSigner', () => {
       return walletClient.pair(uri);
     });
     await walletConnectSigner.open();
-    // const sleep = new Promise((resolve) => {
-    //   setTimeout(() => {
-    //     resolve(true);
-    //   }, 1000);
-    // });
-    // await sleep;
+    const address = await walletConnectSigner.getAddress();
+    await walletClient.close();
+    await walletConnectSigner.close();
+    expect(address).toContain(new ethers.Wallet(DEFAULT_GENESIS_ACCOUNTS[0].privateKey).address);
+  });
+
+  it('should reConnect', async () => {
+    jest.setTimeout(30000);
+    const walletClient = getWalletClient();
+    const walletConnectSigner = getAppClient();
+    walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
+      return walletClient.pair(uri);
+    });
+    await walletConnectSigner.open();
+    await walletConnectSigner.close();
+
+    await walletConnectSigner.open();
     const address = await walletConnectSigner.getAddress();
     await walletClient.close();
     await walletConnectSigner.close();
@@ -115,7 +132,6 @@ describe('WalletConnectSigner', () => {
     await walletConnectSigner.open();
     const param = 1;
     const request = await walletConnectSigner.request('oracle_data', [param]);
-    console.log(request);
 
     expect(request).toContain('success');
     expect(request).toContain(param);

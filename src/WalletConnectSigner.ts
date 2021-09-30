@@ -6,6 +6,7 @@ import { AccountId } from 'caip';
 import { Bytes, ethers, Signer } from 'ethers';
 import { Deferrable } from 'ethers/lib/utils';
 import { EventEmitter } from 'events';
+import debug from 'debug';
 
 export const SIGNER_EVENTS = {
   init: 'init',
@@ -20,6 +21,7 @@ export interface WalletConnectSignerOpts {
   methods: string[];
   blockchain: string;
   walletConnectOpts: Partial<ClientOptions>;
+  debug: boolean;
 }
 
 const DEFAULT: WalletConnectSignerOpts = {
@@ -36,6 +38,7 @@ const DEFAULT: WalletConnectSignerOpts = {
     },
     controller: false,
   },
+  debug: false,
 };
 
 function isClient(opts?: IClient | ClientOptions): opts is IClient {
@@ -53,6 +56,7 @@ export class WalletConnectSigner extends Signer {
   private session: SessionTypes.Settled | undefined;
   _index: number;
   _address: string;
+  private log: debug.Debugger;
 
   constructor(_opts: Partial<WalletConnectSignerOpts> = {}, provider?: ethers.providers.Provider) {
     super();
@@ -66,6 +70,9 @@ export class WalletConnectSigner extends Signer {
       ...DEFAULT,
       ..._opts,
     };
+
+    this.log = debug('WalletconnectSigner');
+    this.log.enabled = this.opts.debug ? true : false;
     this.events = new EventEmitter();
     if (provider) {
       this.provider = provider;
@@ -121,31 +128,43 @@ export class WalletConnectSigner extends Signer {
       };
 
       const supportedSession = await this.client.session.find(permissions);
-
+      this.log('supportedSession amount: ', supportedSession.length);
       if (supportedSession.length > 0) {
-        console.log('ReOpen session with topic', supportedSession[0].topic);
-        this.updateState(this.session);
+        this.log('reconnecting to session', supportedSession[0].topic);
+        this.updateState(supportedSession[0]);
       } else if (!opts.onlyReconnect) {
-        this.session = await client.connect({
+        const confirmOpen = new Promise((resolve) => {
+          this.client.on(CLIENT_EVENTS.session.created, (_: SessionTypes.Settled) => {
+            resolve(true);
+          });
+        });
+        await client.connect({
           metadata,
           permissions,
         });
-        this.updateState(this.session);
+        await confirmOpen;
       } else {
-        console.debug('No supportedSession and onlyReconnect');
+        this.log(`onlyReconnect is ${opts.onlyReconnect} and found no supported sessions`);
       }
       this.onOpen();
     } catch (error) {
-      console.log(error);
+      this.log(error);
       throw error;
     }
   }
 
   public async close() {
+    debug('close initiated');
     if (typeof this.session === 'undefined') {
+      debug('close requested with no session defined, will not close anything');
       return;
     }
     const client = await this.register();
+    const confirmClose = new Promise((resolve) => {
+      this.client.on(CLIENT_EVENTS.session.deleted, (_: SessionTypes.Settled) => {
+        resolve(true);
+      });
+    });
     await client.disconnect({
       topic: this.session.topic,
       reason: {
@@ -153,11 +172,12 @@ export class WalletConnectSigner extends Signer {
         message: 'WalletConnectSigner closed.',
       },
     });
+    await confirmClose;
     this.onClose();
   }
 
   public async getAddress() {
-    console.log(this.accounts);
+    this.log(this.accounts);
     if (!this.accounts) {
       throw Error('client must be enabled before you can list accounts.');
     }
@@ -174,7 +194,7 @@ export class WalletConnectSigner extends Signer {
       if (!this.connected) await this.open();
     }
     if (typeof this.session === 'undefined') {
-      throw new Error('Signer connection is missing session');
+      throw new Error('Signer connection is missing session for signMessage');
     }
     const wc = await this.register();
     const address = await this.getAddress();
@@ -198,7 +218,7 @@ export class WalletConnectSigner extends Signer {
       if (!this.connected) await this.open();
     }
     if (typeof this.session === 'undefined') {
-      throw new Error('Signer connection is missing session');
+      throw new Error('Signer connection is missing session for signTransaction');
     }
     transaction = {
       ...transaction,
@@ -221,7 +241,7 @@ export class WalletConnectSigner extends Signer {
       if (!this.connected) await this.open();
     }
     if (typeof this.session === 'undefined') {
-      throw new Error('Signer connection is missing session');
+      throw new Error('Signer connection is missing session for request');
     }
     const res = await this.client.request({
       request: {
@@ -288,11 +308,12 @@ export class WalletConnectSigner extends Signer {
     this.pending = false;
     if (session) {
       this.session = session;
+      this.events.emit(SIGNER_EVENTS.open);
     }
-    this.events.emit(SIGNER_EVENTS.open);
   }
 
   private async updateState(session: SessionTypes.Settled) {
+    this.session = session;
     const { accounts } = session.state;
     // Check if accounts changed and trigger event
     if (!this.accounts || (accounts && this.accounts !== accounts)) {
@@ -305,17 +326,22 @@ export class WalletConnectSigner extends Signer {
     // TODO chainChanged, networkChanged, rpcChanged, BlockchainChanged? :D
   }
 
+  // private removeEventListeners() {
+  //   if (typeof this.client === 'undefined') return;
+  //   this.events.removeAllListeners(CLIENT_EVENTS.session.updated);
+  //   this.events.removeAllListeners(CLIENT_EVENTS.session.created);
+  //   this.events.removeAllListeners(CLIENT_EVENTS.session.deleted);
+  // }
   private registerEventListeners() {
     if (typeof this.client === 'undefined') return;
     // Sessions
     this.client.on(CLIENT_EVENTS.session.updated, async (session: SessionTypes.Settled) => {
-      console.debug('CLIENT_EVENTS.session.updated');
+      this.log('CLIENT_EVENTS.session.updated');
       if (!this.session || this.session?.topic !== session.topic) return;
-      this.session = session;
       this.updateState(session);
     });
     this.client.on(CLIENT_EVENTS.session.created, (session: SessionTypes.Settled) => {
-      console.debug('CLIENT_EVENTS.session.created');
+      this.log('CLIENT_EVENTS.session.created');
       this.updateState(session);
     });
     this.client.on(CLIENT_EVENTS.session.deleted, (_session: SessionTypes.Settled) => {
@@ -323,18 +349,18 @@ export class WalletConnectSigner extends Signer {
     });
     // Pairing
     this.client.on(CLIENT_EVENTS.pairing.proposal, async (proposal: PairingTypes.Proposal) => {
-      console.debug('CLIENT_EVENTS.pairing.proposal');
+      this.log('CLIENT_EVENTS.pairing.proposal');
       const uri = proposal.signal.params.uri;
       this.events.emit(SIGNER_EVENTS.uri, uri);
     });
     this.client.on(CLIENT_EVENTS.pairing.updated, async (_pairing: PairingTypes.Settled) => {
-      console.debug('CLIENT_EVENTS.pairing.updated');
+      this.log('CLIENT_EVENTS.pairing.updated');
     });
     this.client.on(CLIENT_EVENTS.pairing.created, async (_pairing: PairingTypes.Settled) => {
-      console.debug('CLIENT_EVENTS.pairing.created');
+      this.log('CLIENT_EVENTS.pairing.created');
     });
     this.client.on(CLIENT_EVENTS.pairing.deleted, async (_pairing: PairingTypes.Settled) => {
-      console.debug('CLIENT_EVENTS.pairing.deleted');
+      this.log('CLIENT_EVENTS.pairing.deleted');
     });
   }
 }
