@@ -1,8 +1,11 @@
 {
   "name": "@symfoni/walletconnect-v2-ethers-signer",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "A Ethers compatible signer for Wallet Connect version 2.",
-  "repository": "https://github.com/symfoni/walletconnect-v2-ethers-signer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/symfoni/walletconnect-v2-ethers-signer"
+  },
   "files": [
     "lib/"
   ],
