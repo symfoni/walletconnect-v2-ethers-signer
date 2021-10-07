@@ -54,7 +54,10 @@ describe('WalletConnectSigner', () => {
 
   afterAll(() => {
     setTimeout(() => {
-      unlinkSync('test.db');
+      try {
+        unlinkSync('test.db');
+        // eslint-disable-next-line no-empty
+      } catch (_) {}
     }, 300);
   });
 
