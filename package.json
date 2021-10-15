@@ -1,6 +1,6 @@
 {
   "name": "@symfoni/walletconnect-v2-ethers-signer",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "A Ethers compatible signer for Wallet Connect version 2.",
   "repository": {
     "type": "git",
@@ -19,14 +19,14 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run patch && npm run build",
     "patch": "npm version patch --force",
     "publish:beta": "npm publish --tag beta"
   },
   "dependencies": {
     "@types/debug": "^4.1.7",
-    "@walletconnect/client": "^2.0.0-beta.18.2",
-    "@walletconnect/types": "^2.0.0-beta.18.2",
+    "@walletconnect/client": "^2.0.0-beta.18.3",
+    "@walletconnect/types": "^2.0.0-beta.18.3",
     "caip": "^1.0.0",
     "debug": "^4.3.2",
     "ethers": "^5.1.3",
