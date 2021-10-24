@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Client, CLIENT_EVENTS } from '@walletconnect/client';
 import { ClientOptions, IClient, PairingTypes, SessionTypes, ClientTypes } from '@walletconnect/types';
-import { AccountId } from 'caip';
 import { ethers } from 'ethers';
 import { EventEmitter } from 'events';
 import debug from 'debug';
@@ -202,10 +201,11 @@ export class WalletClient {
       const response: ClientTypes.ResponseInput = {
         state: {
           accounts: [
-            AccountId.format({
-              chainId: { reference: network.chainId.toString(), namespace: 'eip155' },
-              address: this.signer.address,
-            }),
+            // AccountId.format({
+            //   chainId: { reference: network.chainId.toString(), namespace: 'eip155' },
+            //   address: this.signer.address,
+            // }),
+            `eip155:${network.chainId.toString()}:${this.signer.address}`,
           ],
         },
         metadata,
