@@ -184,7 +184,7 @@ export class WalletClient {
       this.log('WALLET_EVENTS.session.created');
     });
     this.client.on(CLIENT_EVENTS.session.deleted, (_session: SessionTypes.Settled) => {
-      // this.log('WALLET_EVENTS.session.deleted');
+      this.log('WALLET_EVENTS.session.deleted');
     });
     this.client.on(CLIENT_EVENTS.session.request, async (requestEvent: SessionTypes.RequestEvent) => {
       this.log('WalletClient: session.request', requestEvent);

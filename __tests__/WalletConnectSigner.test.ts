@@ -95,12 +95,15 @@ describe('WalletConnectSigner', () => {
       return walletClient.pair(uri);
     });
     await walletConnectSigner.open();
-    await walletConnectSigner.close();
+    // removed, if we close session it should not reconnect.
+    // await walletConnectSigner.close();
 
-    await walletConnectSigner.open();
-    const address = await walletConnectSigner.getAddress();
+    const walletConnectSigner2 = getAppClient();
+    await walletConnectSigner2.open();
+    const address = await walletConnectSigner2.getAddress();
     await walletClient.close();
     await walletConnectSigner.close();
+    await walletConnectSigner2.close();
     expect(address).toContain(new ethers.Wallet(DEFAULT_GENESIS_ACCOUNTS[0].privateKey).address);
   });
 
