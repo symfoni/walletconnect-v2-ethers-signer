@@ -28,7 +28,7 @@ const DEFAULT: WalletConnectSignerOpts = {
   methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTransaction'],
   blockchain: 'eip155',
   walletConnectOpts: {
-    relayProvider: 'wss://relay.walletconnect.org',
+    relayUrl: 'wss://relay.walletconnect.org',
     metadata: {
       name: 'Some dApp',
       description: 'Some example dApp',
