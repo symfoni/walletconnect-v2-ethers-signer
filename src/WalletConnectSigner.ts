@@ -28,7 +28,7 @@ const DEFAULT: WalletConnectSignerOpts = {
   methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTransaction'],
   blockchain: 'eip155',
   walletConnectOpts: {
-    relayUrl: 'wss://relay.walletconnect.org',
+    relayUrl: 'wss://relay.walletconnect.com',
     metadata: {
       name: 'Some dApp',
       description: 'Some example dApp',
@@ -36,6 +36,7 @@ const DEFAULT: WalletConnectSignerOpts = {
       icons: ['https://gblobscdn.gitbook.com/spaces%2F-LJJeCjcLrr53DcT1Ml7%2Favatar.png?alt=media'],
     },
     controller: false,
+    projectId: '7bce7aed9e29ec53076fac9181c66144',
   },
   debug: false,
 };

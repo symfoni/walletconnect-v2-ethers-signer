@@ -25,6 +25,7 @@ const getWalletClient = () => {
         database: 'test.db',
         tableName: 'wallet_client',
       },
+      projectId: '7bce7aed9e29ec53076fac9181c66144',
       logger: 'warn',
     },
     debug: true,
@@ -98,12 +99,12 @@ describe('WalletConnectSigner', () => {
     // removed, if we close session it should not reconnect.
     // await walletConnectSigner.close();
 
-    const walletConnectSigner2 = getAppClient();
-    await walletConnectSigner2.open();
-    const address = await walletConnectSigner2.getAddress();
+    const walletConnectSignerReconnect = getAppClient();
+    await walletConnectSignerReconnect.open();
+    const address = await walletConnectSignerReconnect.getAddress();
     await walletClient.close();
     await walletConnectSigner.close();
-    await walletConnectSigner2.close();
+    await walletConnectSignerReconnect.close();
     expect(address).toContain(new ethers.Wallet(DEFAULT_GENESIS_ACCOUNTS[0].privateKey).address);
   });
 

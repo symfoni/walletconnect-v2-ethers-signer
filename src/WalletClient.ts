@@ -25,7 +25,7 @@ export const DEFAULT: WalletClientOpts = {
       url: 'https://walletconnect.io',
     },
     controller: true,
-    relayUrl: 'wss://relay.walletconnect.org',
+    relayUrl: 'wss://relay.walletconnect.com',
     name: 'WalletClient',
   },
   debug: false,

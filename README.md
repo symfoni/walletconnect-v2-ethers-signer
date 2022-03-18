@@ -5,12 +5,6 @@
 [![Build Status - Travis][travis-badge]][travis-ci]
 [![Build Status - GitHub Actions][gha-badge]][gha-ci]
 
-#### 👷‍ Join our team to contribute full-time to tools like Walletconnect v2 Ethers signer!
-
-We're hiring. If you're a full-stack dApp developer, we want you! 👈 This is an excellent opportunity to contribute full-time to the Ethereum ecosystem.
-
-**[Check out our job listing](https://www.notion.so/symfoni/Symfoni-jobs-0c2bdc029d2a4cf7b91864a5e68ed00f)**
-
 # Use
 
 ```ts
@@ -22,7 +16,7 @@ return new WalletConnectSigner().connect(new ethers.providers.JsonRpcProvider(RP
 walletConnectSigner.on(SIGNER_EVENTS.uri, (uri) => {
   // Show URI so that a wallet can pair (not handled here yet)
 });
-await walletConnectSigner.open(); // This will either trigger a session creation where an URI will be created, else it will connect to old session
+await walletConnectSigner.open(); // This will trigger a session creation where an URI will be created or it will connect to old session.
 const address = await walletConnectSigner.getAddress();
 ```
 
